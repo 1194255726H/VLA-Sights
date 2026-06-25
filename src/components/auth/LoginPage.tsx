@@ -30,30 +30,9 @@ export function LoginPage() {
   };
 
   return (
-    <main className="flex min-h-screen min-w-[1180px] items-center justify-center bg-slate-100 px-6 py-10">
-      <section className="grid w-full max-w-[980px] grid-cols-[1.05fr_0.95fr] overflow-hidden rounded-md border border-slate-200 bg-white shadow-sm">
-        <div className="flex flex-col justify-between bg-slate-950 p-10 text-white">
-          <div>
-            {/* <div className="text-sm font-semibold text-cyan-300">VLA 数据审核平台</div> */}
-            <h1 className="mt-5 text-3xl font-semibold leading-tight">视频标注 Demo 联调入口</h1>
-            <p className="mt-4 max-w-[420px] text-sm leading-7 text-slate-300">
-              登录后先进入项目列表，再选择项目进入任务标注工作台。权限将按接口返回角色控制可用操作。
-            </p>
-          </div>
-          <div className="grid grid-cols-3 gap-3 text-xs text-slate-300">
-            {demoAccounts.map(([username, password, role]) => (
-              <button
-                key={username}
-                type="button"
-                onClick={() => fillAccount(username, password)}
-                className="rounded-md border border-white/10 bg-white/5 p-3 text-left transition hover:border-cyan-300/50 hover:bg-white/10"
-              >
-                <div className="font-semibold text-white">{role}</div>
-                <div className="mt-1 font-mono text-[11px] text-slate-400">{username}</div>
-              </button>
-            ))}
-          </div>
-        </div>
+    <main className="flex min-h-screen items-center justify-center bg-slate-100 px-6 py-10">
+      <section className="grid w-full max-w-[480px] overflow-hidden rounded-md border border-slate-200 bg-white shadow-sm">
+
 
         <div className="p-10">
           <Typography.Title level={3} className="!mb-1">

@@ -1,4 +1,4 @@
-﻿import { Tag } from 'antd';
+import { Tag } from 'antd';
 import clsx from 'clsx';
 import type { VideoEvent } from '../../types/domain';
 import { reviewStatusLabel } from '../../utils/labels';
@@ -37,9 +37,9 @@ export function EventTimeline({ events, selectedEvent, reviewStatusByEventId, on
             )}
           >
             <div className="mb-2 flex items-center justify-between gap-2">
-              <span className="truncate text-sm font-semibold text-slate-900">事件 #{event.id}</span>
+              <span className="min-w-0 truncate text-sm font-semibold text-slate-900">{event.title}</span>
               {reviewStatusByEventId[event.id] ? (
-                <span className="text-[11px] text-blue-600">{reviewStatusLabel[reviewStatusByEventId[event.id] as keyof typeof reviewStatusLabel]}</span>
+                <span className="shrink-0 text-[11px] text-blue-600">{reviewStatusLabel[reviewStatusByEventId[event.id] as keyof typeof reviewStatusLabel]}</span>
               ) : null}
             </div>
             <div className="font-mono text-xs text-slate-600">{formatRange(event.start_time_ms / 1000, event.end_time_ms / 1000)}</div>
@@ -52,3 +52,4 @@ export function EventTimeline({ events, selectedEvent, reviewStatusByEventId, on
     </section>
   );
 }
+

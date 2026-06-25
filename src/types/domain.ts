@@ -1,4 +1,4 @@
-﻿export type UserRole = 'admin' | 'labeler' | 'reviewer';
+export type UserRole = 'admin' | 'labeler' | 'reviewer';
 
 export interface User {
   id: number;
@@ -59,7 +59,9 @@ export interface VideoEvent {
   task_id: number;
   start_time_ms: number;
   end_time_ms: number;
+  title: string;
   description: string;
+  reasoning_description: string;
   confidence: number;
   source: EventSource;
   status: EventStatus;
@@ -75,7 +77,9 @@ export interface ReviewResult {
 }
 
 export interface EventEditPayload {
+  title: string;
   description: string;
+  reasoning_description: string;
   start_time_ms: number;
   end_time_ms: number;
 }
@@ -95,3 +99,4 @@ export interface AnalysisJob {
   started_at?: string;
   finished_at?: string;
 }
+

@@ -1,4 +1,4 @@
-﻿import { Button, Descriptions, Divider, Empty, Form, Input, InputNumber, Modal, Progress, Space, Tag, message } from 'antd';
+import { Button, Descriptions, Divider, Empty, Form, Input, InputNumber, Modal, Progress, Space, Tag, message } from 'antd';
 import { CheckCircleOutlined, CloseCircleOutlined, EditOutlined } from '@ant-design/icons';
 import { useMemo, useState } from 'react';
 import { useReviewStore } from '../../store/useReviewStore';
@@ -31,7 +31,9 @@ export function ReviewPanel() {
     form.setFieldsValue({
       start_time_ms: selectedEvent.start_time_ms,
       end_time_ms: selectedEvent.end_time_ms,
+      title: selectedEvent.title,
       description: selectedEvent.description,
+      reasoning_description: selectedEvent.reasoning_description,
     });
     setEditOpen(true);
   };
@@ -94,7 +96,9 @@ export function ReviewPanel() {
       <div className="min-h-0 flex-1 overflow-y-auto p-4">
         <div className="rounded-md border border-slate-200 bg-slate-50 p-4">
           <div className="mb-3 flex items-center justify-between gap-3">
-            <div className="text-lg font-semibold text-slate-950">模型事件</div>
+            <div className="min-w-0 text-lg font-semibold text-slate-950">
+              <span className="block truncate">{selectedEvent.title}</span>
+            </div>
             <div className="font-mono text-xs text-slate-500">{formatRange(selectedEvent.start_time_ms / 1000, selectedEvent.end_time_ms / 1000)}</div>
           </div>
           <Progress
@@ -113,9 +117,15 @@ export function ReviewPanel() {
           <Descriptions.Item label="结束时间">{selectedEvent.end_time_ms} ms</Descriptions.Item>
         </Descriptions>
 
+
         <div className="mt-4">
           <div className="mb-2 text-xs font-semibold tracking-wide text-slate-500">事件描述</div>
           <p className="rounded-md border border-slate-200 bg-white p-3 text-sm leading-6 text-slate-700">{selectedEvent.description}</p>
+        </div>
+
+        <div className="mt-4">
+          <div className="mb-2 text-xs font-semibold tracking-wide text-slate-500">推理描述</div>
+          <p className="rounded-md border border-slate-200 bg-white p-3 text-sm leading-6 text-slate-700">{selectedEvent.reasoning_description}</p>
         </div>
 
         {/* {selectedEvent.raw_payload ? (
@@ -156,7 +166,13 @@ export function ReviewPanel() {
               <InputNumber min={0} className="w-full" addonAfter="ms" />
             </Form.Item>
           </div>
+          <Form.Item name="title" label="事件标题" rules={[{ required: true }]}> 
+            <Input />
+          </Form.Item>
           <Form.Item name="description" label="事件描述" rules={[{ required: true }]}> 
+            <TextArea rows={4} />
+          </Form.Item>
+          <Form.Item name="reasoning_description" label="推理描述" rules={[{ required: true }]}> 
             <TextArea rows={4} />
           </Form.Item>
         </Form>
@@ -172,3 +188,5 @@ export function ReviewPanel() {
     </aside>
   );
 }
+
+
