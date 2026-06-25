@@ -38,37 +38,42 @@ export function EventTimeline({ events, selectedEvent, reviewStatusByEventId, on
           {events.length} 个片段
         </Tag>
       </div>
-      <div
-        ref={scrollRef}
-        onWheel={handleWheel}
-        className="flex gap-3 overflow-x-scroll overflow-y-hidden pb-3 [scrollbar-gutter:stable] [scrollbar-width:thin] [scrollbar-color:#06b6d4_#e2e8f0] [&::-webkit-scrollbar]:h-2 [&::-webkit-scrollbar-track]:rounded-full [&::-webkit-scrollbar-track]:bg-slate-200 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-cyan-500"
-      >
-        {events.map((event) => (
-          <button
-            key={event.id}
-            type="button"
-            onClick={() => onSelect(event)}
-            className={clsx(
-              'h-[68px] min-w-[180px] rounded-md border px-3 text-left transition',
-              selectedEvent?.id === event.id
-                ? 'border-blue-500 bg-blue-50 shadow-sm'
-                : 'border-slate-200 bg-slate-50 hover:border-slate-300',
-            )}
-          >
-            <div className="mb-2 flex items-center justify-between gap-2">
-              <span className="min-w-0 truncate text-sm font-semibold text-slate-900">{event.title}</span>
-              {reviewStatusByEventId[event.id] ? (
-                <span className="shrink-0 text-[11px] text-blue-600">{reviewStatusLabel[reviewStatusByEventId[event.id] as keyof typeof reviewStatusLabel]}</span>
-              ) : null}
-            </div>
-            <div className="font-mono text-xs text-slate-600">{formatRange(event.start_time_ms / 1000, event.end_time_ms / 1000)}</div>
-            <div className="mt-2 h-1.5 rounded-full bg-slate-200">
-              <div className="h-full rounded-full bg-cyan-500" style={{ width: `${event.confidence * 100}%` }} />
-            </div>
-          </button>
-        ))}
-      </div>
+      {events.length ? (
+        <div
+          ref={scrollRef}
+          onWheel={handleWheel}
+          className="flex gap-3 overflow-x-auto overflow-y-hidden pb-3 [scrollbar-gutter:stable] [scrollbar-width:thin] [scrollbar-color:#06b6d4_#e2e8f0] [&::-webkit-scrollbar]:h-2 [&::-webkit-scrollbar-track]:rounded-full [&::-webkit-scrollbar-track]:bg-slate-200 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-cyan-500"
+        >
+          {events.map((event) => (
+            <button
+              key={event.id}
+              type="button"
+              onClick={() => onSelect(event)}
+              className={clsx(
+                'h-[68px] min-w-[180px] rounded-md border px-3 text-left transition',
+                selectedEvent?.id === event.id
+                  ? 'border-blue-500 bg-blue-50 shadow-sm'
+                  : 'border-slate-200 bg-slate-50 hover:border-slate-300',
+              )}
+            >
+              <div className="mb-2 flex items-center justify-between gap-2">
+                <span className="min-w-0 truncate text-sm font-semibold text-slate-900">{event.title}</span>
+                {reviewStatusByEventId[event.id] ? (
+                  <span className="shrink-0 text-[11px] text-blue-600">{reviewStatusLabel[reviewStatusByEventId[event.id] as keyof typeof reviewStatusLabel]}</span>
+                ) : null}
+              </div>
+              <div className="font-mono text-xs text-slate-600">{formatRange(event.start_time_ms / 1000, event.end_time_ms / 1000)}</div>
+              <div className="mt-2 h-1.5 rounded-full bg-slate-200">
+                <div className="h-full rounded-full bg-cyan-500" style={{ width: `${event.confidence * 100}%` }} />
+              </div>
+            </button>
+          ))}
+        </div>
+      ) : (
+        <div className="flex h-[88px] items-center justify-center rounded-md border border-dashed border-slate-200 bg-slate-50 text-xs text-slate-400">
+          暂无事件片段
+        </div>
+      )}
     </section>
   );
 }
-

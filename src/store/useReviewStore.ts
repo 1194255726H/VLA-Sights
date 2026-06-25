@@ -1,6 +1,6 @@
-﻿import { create } from 'zustand';
+import { create } from 'zustand';
 import { api } from '../api/mockApi';
-import type { AnalysisJob, EventEditPayload, Project, ReviewResult, Task, User, VideoEvent } from '../types/domain';
+import type { AnalysisJob, AnalysisQuery, EventEditPayload, Project, ReviewResult, Task, User, VideoEvent } from '../types/domain';
 
 interface ReviewState {
   user?: User;
@@ -13,6 +13,7 @@ interface ReviewState {
   tasks: Task[];
   currentTask?: Task;
   events: VideoEvent[];
+  analysisQueries: AnalysisQuery[];
   selectedEvent?: VideoEvent;
   seekRequestId: number;
   reviewResults: ReviewResult[];
@@ -33,6 +34,7 @@ interface ReviewState {
   selectTask: (taskId: number) => Promise<void>;
   selectEvent: (eventId: number) => void;
   queryCurrentTask: (prompt: string) => Promise<void>;
+  applyAnalysisQuery: (queryId: number) => Promise<void>;
   analyzeCurrentTask: (prompt: string) => Promise<void>;
   acceptEvent: (eventId: number) => Promise<void>;
   rejectEvent: (eventId: number, reason: string) => Promise<void>;
@@ -56,6 +58,7 @@ export const useReviewStore = create<ReviewState>((set, get) => ({
   projects: [],
   tasks: [],
   events: [],
+  analysisQueries: [],
   seekRequestId: 0,
   reviewResults: [],
   isLoading: false,
@@ -103,6 +106,7 @@ export const useReviewStore = create<ReviewState>((set, get) => ({
       tasks: [],
       currentTask: undefined,
       events: [],
+      analysisQueries: [],
       selectedEvent: undefined,
       reviewResults: [],
       analysisJob: undefined,
@@ -116,6 +120,7 @@ export const useReviewStore = create<ReviewState>((set, get) => ({
       tasks: [],
       currentTask: undefined,
       events: [],
+      analysisQueries: [],
       selectedEvent: undefined,
       reviewResults: [],
       analysisJob: undefined,
@@ -146,6 +151,7 @@ export const useReviewStore = create<ReviewState>((set, get) => ({
       currentTask: undefined,
       tasks: [],
       events: [],
+      analysisQueries: [],
       selectedEvent: undefined,
       reviewResults: [],
       analysisJob: undefined,
@@ -166,19 +172,27 @@ export const useReviewStore = create<ReviewState>((set, get) => ({
   selectTask: async (taskId: number) => {
     const listTask = get().tasks.find((item) => item.id === taskId);
     if (listTask) {
-      set({ currentTask: listTask, taskLoading: true, isLoading: true, events: [], selectedEvent: undefined, analysisError: undefined });
+      set({
+        currentTask: listTask,
+        taskLoading: true,
+        isLoading: true,
+        events: [],
+        analysisQueries: [],
+        selectedEvent: undefined,
+        analysisError: undefined,
+      });
     }
 
-    const task = await api.getTask(taskId);
-    const events = normalizeActiveEvents(task.events);
+    const [task, analysisQueries] = await Promise.all([api.getTask(taskId), api.getAnalysisQueries(taskId)]);
+    const taskWithoutAppliedEvents = { ...task, events: undefined };
     set({
-      currentTask: task,
-      events,
-      selectedEvent: events[0],
-      seekRequestId: events[0] ? get().seekRequestId + 1 : get().seekRequestId,
+      currentTask: taskWithoutAppliedEvents,
+      events: [],
+      analysisQueries,
+      selectedEvent: undefined,
       taskLoading: false,
       isLoading: false,
-      tasks: upsertTask(get().tasks, task),
+      tasks: upsertTask(get().tasks, taskWithoutAppliedEvents),
     });
   },
 
@@ -195,6 +209,30 @@ export const useReviewStore = create<ReviewState>((set, get) => ({
     try {
       const { task, events } = await api.queryTask(currentTask.id, prompt);
       const activeEvents = normalizeActiveEvents(events);
+      const analysisQueries = await api.getAnalysisQueries(currentTask.id);
+      set({
+        currentTask: task,
+        tasks: upsertTask(get().tasks, task),
+        events: activeEvents,
+        analysisQueries,
+        selectedEvent: activeEvents[0],
+        seekRequestId: activeEvents[0] ? get().seekRequestId + 1 : get().seekRequestId,
+        analysisLoading: false,
+      });
+    } catch (error) {
+      set({ analysisLoading: false, analysisError: error instanceof Error ? error.message : '查询失败' });
+      throw error;
+    }
+  },
+
+  applyAnalysisQuery: async (queryId: number) => {
+    const currentTask = get().currentTask;
+    if (!currentTask) return;
+
+    set({ analysisLoading: true, analysisError: undefined });
+    try {
+      const task = await api.applyAnalysisQuery(currentTask.id, queryId);
+      const activeEvents = normalizeActiveEvents(task.events);
       set({
         currentTask: task,
         tasks: upsertTask(get().tasks, task),
@@ -204,7 +242,7 @@ export const useReviewStore = create<ReviewState>((set, get) => ({
         analysisLoading: false,
       });
     } catch (error) {
-      set({ analysisLoading: false, analysisError: error instanceof Error ? error.message : '查询失败' });
+      set({ analysisLoading: false, analysisError: error instanceof Error ? error.message : '应用历史查询失败' });
       throw error;
     }
   },

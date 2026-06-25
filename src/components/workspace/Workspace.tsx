@@ -12,6 +12,7 @@ export function Workspace() {
   const user = useReviewStore((state) => state.user);
   const currentTask = useReviewStore((state) => state.currentTask);
   const events = useReviewStore((state) => state.events);
+  const analysisQueries = useReviewStore((state) => state.analysisQueries);
   const selectedEvent = useReviewStore((state) => state.selectedEvent);
   const seekRequestId = useReviewStore((state) => state.seekRequestId);
   const reviewResults = useReviewStore((state) => state.reviewResults);
@@ -21,6 +22,7 @@ export function Workspace() {
   const analysisError = useReviewStore((state) => state.analysisError);
   const selectEvent = useReviewStore((state) => state.selectEvent);
   const queryCurrentTask = useReviewStore((state) => state.queryCurrentTask);
+  const applyAnalysisQuery = useReviewStore((state) => state.applyAnalysisQuery);
   const analyzeCurrentTask = useReviewStore((state) => state.analyzeCurrentTask);
 
   const canAnalyze = user?.role === 'admin' || user?.role === 'labeler';
@@ -34,6 +36,11 @@ export function Workspace() {
 
   const handleSelectEvent = (event: VideoEvent) => {
     selectEvent(event.id);
+  };
+
+  const handleApplyHistoryQuery = async (queryId: number) => {
+    await applyAnalysisQuery(queryId);
+    void message.success('历史查询已应用');
   };
 
   const runQuery = async () => {
@@ -94,6 +101,22 @@ export function Workspace() {
               异步分析
             </Button> */}
           </Space.Compact>
+        </div>
+
+        <div className="mt-3">
+          <div className="mb-2 text-xs font-semibold tracking-wide text-slate-500">历史查询</div>
+          {analysisQueries.length ? (
+            <Space wrap size={[8, 8]}>
+              {analysisQueries.map((query) => (
+                <Tag key={query.id} color="blue" className="m-0 cursor-pointer px-2 py-1" onClick={() => void handleApplyHistoryQuery(query.id)}>
+                  {query.query}
+                  <span className="ml-1 text-[11px] text-slate-500">{query.event_count}</span>
+                </Tag>
+              ))}
+            </Space>
+          ) : (
+            <div className="text-xs text-slate-400">暂无历史查询</div>
+          )}
         </div>
 
         {!canAnalyze ? <Alert className="mt-3" type="info" showIcon message="当前角色可查看任务和事件，不能发起分析。" /> : null}

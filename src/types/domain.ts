@@ -68,6 +68,18 @@ export interface VideoEvent {
   raw_payload?: Record<string, unknown>;
 }
 
+export interface AnalysisQuery {
+  id: number;
+  task_id: number;
+  query: string;
+  query_hash: string;
+  prompt_version: string;
+  event_count: number;
+  created_by: number;
+  created_at: string;
+  updated_at: string;
+}
+
 export type ReviewStatus = 'accepted' | 'rejected' | 'edited';
 
 export interface ReviewResult {

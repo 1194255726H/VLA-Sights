@@ -1,4 +1,4 @@
-import type { AnalysisJob, AuthSession, Project, ReviewResult, Task, User, VideoEvent } from '../types/domain';
+import type { AnalysisJob, AnalysisQuery, AuthSession, Project, ReviewResult, Task, User, VideoEvent } from '../types/domain';
 
 const API_BASE_URL = import.meta.env.VITE_VLA_API_BASE_URL ?? '';
 const USE_MOCK = import.meta.env.VITE_USE_MOCK_API === 'true';
@@ -125,6 +125,36 @@ const eventsByTaskId = tasks.reduce<Record<number, VideoEvent[]>>((acc, task, in
   return acc;
 }, {});
 
+const analysisQueriesByTaskId = tasks.reduce<Record<number, AnalysisQuery[]>>((acc, task, index) => {
+  acc[task.id] = index < 2
+    ? [
+        {
+          id: task.id * 100 + 1,
+          task_id: task.id,
+          query: '寻找将物品放入书架的关键动作片段',
+          query_hash: `mock-hash-${task.id}-1`,
+          prompt_version: 'video-event-query-v2:segments',
+          event_count: eventsByTaskId[task.id]?.length ?? 0,
+          created_by: defaultUser.id,
+          created_at: '2026-06-25T12:00:00+08:00',
+          updated_at: '2026-06-25T12:01:00+08:00',
+        },
+        {
+          id: task.id * 100 + 2,
+          task_id: task.id,
+          query: '寻找车辆超过行人的时刻',
+          query_hash: `mock-hash-${task.id}-2`,
+          prompt_version: 'video-event-query-v2:segments',
+          event_count: 3,
+          created_by: defaultUser.id,
+          created_at: '2026-06-25T12:03:00+08:00',
+          updated_at: '2026-06-25T12:04:00+08:00',
+        },
+      ]
+    : [];
+  return acc;
+}, {});
+
 const mockJobTaskIds: Record<number, number> = {};
 
 const mockBackend = {
@@ -172,12 +202,51 @@ const mockBackend = {
     return { ...task, presigned_url: '/camera.mp4', events: eventsByTaskId[taskId] ?? [] };
   },
 
+  async getAnalysisQueries(taskId: number): Promise<AnalysisQuery[]> {
+    await delay(180);
+    return analysisQueriesByTaskId[taskId] ?? [];
+  },
+
+  async applyAnalysisQuery(taskId: number, queryId: number): Promise<Task> {
+    await delay(260);
+    const task = tasks.find((item) => item.id === taskId);
+    if (!task) throw new Error('任务不存在');
+    const query = analysisQueriesByTaskId[taskId]?.find((item) => item.id === queryId);
+    if (!query) throw new Error('分析查询不存在或无权访问。');
+    const events = [makeEvent(taskId, 0, query.query), makeEvent(taskId, 1, query.query), makeEvent(taskId, 2, query.query)];
+    eventsByTaskId[taskId] = events;
+    const nextTask = { ...task, status: 'labeling' as const, assigned_to: defaultUser.id, assigned_username: defaultUser.username, analysis_prompt: query.query, presigned_url: '/camera.mp4', events };
+    Object.assign(task, nextTask);
+    return nextTask;
+  },
+
   async queryTask(taskId: number, prompt: string): Promise<{ task: Task; events: VideoEvent[] }> {
     await delay(520);
     const task = tasks.find((item) => item.id === taskId);
     if (!task) throw new Error('任务不存在');
     const events = [makeEvent(taskId, 0, prompt), makeEvent(taskId, 1, prompt), makeEvent(taskId, 2, prompt)];
     eventsByTaskId[taskId] = events;
+    const now = new Date().toISOString();
+    const existingQuery = analysisQueriesByTaskId[taskId]?.find((item) => item.query === prompt);
+    if (existingQuery) {
+      existingQuery.event_count = events.length;
+      existingQuery.updated_at = now;
+    } else {
+      analysisQueriesByTaskId[taskId] = [
+        {
+          id: Date.now(),
+          task_id: taskId,
+          query: prompt,
+          query_hash: `mock-hash-${taskId}-${Date.now()}`,
+          prompt_version: 'video-event-query-v2:segments',
+          event_count: events.length,
+          created_by: defaultUser.id,
+          created_at: now,
+          updated_at: now,
+        },
+        ...(analysisQueriesByTaskId[taskId] ?? []),
+      ];
+    }
     const nextTask = { ...task, status: 'labeling' as const, assigned_to: defaultUser.id, assigned_username: defaultUser.username, analysis_prompt: prompt, presigned_url: '/camera.mp4', events };
     Object.assign(task, nextTask);
     return { task: nextTask, events };
@@ -262,6 +331,19 @@ export const api = {
   async getTask(taskId: number): Promise<Task> {
     if (USE_MOCK) return mockBackend.getTask(taskId);
     return request<Task>(`/api/vla/tasks/${taskId}/`);
+  },
+
+  async getAnalysisQueries(taskId: number): Promise<AnalysisQuery[]> {
+    if (USE_MOCK) return mockBackend.getAnalysisQueries(taskId);
+    return request<AnalysisQuery[]>(`/api/vla/tasks/${taskId}/analysis-queries/`);
+  },
+
+  async applyAnalysisQuery(taskId: number, queryId: number): Promise<Task> {
+    if (USE_MOCK) return mockBackend.applyAnalysisQuery(taskId, queryId);
+    return request<Task>(`/api/vla/tasks/${taskId}/analysis-queries/${queryId}/apply/`, {
+      method: 'POST',
+      body: JSON.stringify({}),
+    });
   },
 
   async queryTask(taskId: number, prompt: string): Promise<{ task: Task; events: VideoEvent[] }> {
