@@ -1,5 +1,7 @@
 import { Tag } from 'antd';
 import clsx from 'clsx';
+import { useRef } from 'react';
+import type { WheelEvent } from 'react';
 import type { VideoEvent } from '../../types/domain';
 import { reviewStatusLabel } from '../../utils/labels';
 import { formatRange } from '../../utils/time';
@@ -12,8 +14,21 @@ interface EventTimelineProps {
 }
 
 export function EventTimeline({ events, selectedEvent, reviewStatusByEventId, onSelect }: EventTimelineProps) {
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+
+  const handleWheel = (event: WheelEvent<HTMLDivElement>) => {
+    const container = scrollRef.current;
+    if (!container) return;
+
+    if (Math.abs(event.deltaY) <= Math.abs(event.deltaX)) {
+      return;
+    }
+
+    event.preventDefault();
+    container.scrollLeft += event.deltaY;
+  };
   return (
-    <section className="h-[132px] shrink-0 border-t border-slate-200 bg-white p-3">
+    <section className="h-[142px] shrink-0 border-t border-slate-200 bg-white p-2">
       <div className="mb-2 flex items-center justify-between">
         <div>
           <div className="text-sm font-semibold text-slate-950">事件时间轴</div>
@@ -23,7 +38,11 @@ export function EventTimeline({ events, selectedEvent, reviewStatusByEventId, on
           {events.length} 个片段
         </Tag>
       </div>
-      <div className="flex gap-3 overflow-x-auto pb-1">
+      <div
+        ref={scrollRef}
+        onWheel={handleWheel}
+        className="flex gap-3 overflow-x-scroll overflow-y-hidden pb-3 [scrollbar-gutter:stable] [scrollbar-width:thin] [scrollbar-color:#06b6d4_#e2e8f0] [&::-webkit-scrollbar]:h-2 [&::-webkit-scrollbar-track]:rounded-full [&::-webkit-scrollbar-track]:bg-slate-200 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-cyan-500"
+      >
         {events.map((event) => (
           <button
             key={event.id}

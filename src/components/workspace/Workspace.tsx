@@ -8,7 +8,7 @@ import { EventTimeline } from './EventTimeline';
 import { VideoReviewPlayer } from './VideoReviewPlayer';
 
 export function Workspace() {
-  const [prompt, setPrompt] = useState('寻找车辆超过行人的时刻');
+  const [prompt, setPrompt] = useState('');
   const user = useReviewStore((state) => state.user);
   const currentTask = useReviewStore((state) => state.currentTask);
   const events = useReviewStore((state) => state.events);
