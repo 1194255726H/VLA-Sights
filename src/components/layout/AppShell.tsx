@@ -70,7 +70,7 @@ export function AppShell({ route }: AppShellProps) {
           <Content className="min-w-0 bg-slate-100">
             <Workspace />
           </Content>
-          <Sider width={840} theme="light" className="border-l border-slate-200 bg-white">
+          <Sider width="35vw" theme="light" className="border-l border-slate-200 bg-white">
             <ReviewPanel />
           </Sider>
         </Layout>
