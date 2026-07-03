@@ -63,9 +63,9 @@ export function EventTimeline({ events, selectedEvent, reviewStatusByEventId, on
                 ) : null}
               </div>
               <div className="font-mono text-xs text-slate-600">{formatRange(event.start_time_ms / 1000, event.end_time_ms / 1000)}</div>
-              <div className="mt-2 h-1.5 rounded-full bg-slate-200">
+              {/* <div className="mt-2 h-1.5 rounded-full bg-slate-200">
                 <div className="h-full rounded-full bg-cyan-500" style={{ width: `${event.confidence * 100}%` }} />
-              </div>
+              </div> */}
             </button>
           ))}
         </div>

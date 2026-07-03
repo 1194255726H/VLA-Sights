@@ -1,14 +1,17 @@
-import { Button, Descriptions, Divider, Empty, Form, Input, InputNumber, Modal, Progress, Space, Tag, message } from 'antd';
-import { CheckCircleOutlined, CloseCircleOutlined, EditOutlined } from '@ant-design/icons';
-import { useMemo, useState } from 'react';
+﻿import { Button, Empty, Form, Input, InputNumber, Modal, Space, Tag, message } from 'antd';
+import { CheckCircleOutlined, CloseCircleOutlined, DownOutlined, EditOutlined, RightOutlined } from '@ant-design/icons';
+import clsx from 'clsx';
+import { useEffect, useMemo, useState } from 'react';
 import { useReviewStore } from '../../store/useReviewStore';
-import type { EventEditPayload } from '../../types/domain';
+import type { EventEditPayload, VideoEvent } from '../../types/domain';
 import { reviewStatusLabel } from '../../utils/labels';
 import { formatRange } from '../../utils/time';
 
 const { TextArea } = Input;
 
 export function ReviewPanel() {
+  const [expandedEventIds, setExpandedEventIds] = useState<Set<number>>(new Set());
+  const [activeEvent, setActiveEvent] = useState<VideoEvent | undefined>();
   const [editOpen, setEditOpen] = useState(false);
   const [rejectOpen, setRejectOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -16,61 +19,103 @@ export function ReviewPanel() {
   const [rejectForm] = Form.useForm<{ reason: string }>();
 
   const currentTask = useReviewStore((state) => state.currentTask);
+  const events = useReviewStore((state) => state.events);
   const selectedEvent = useReviewStore((state) => state.selectedEvent);
   const reviewResults = useReviewStore((state) => state.reviewResults);
+  const selectEvent = useReviewStore((state) => state.selectEvent);
   const acceptEvent = useReviewStore((state) => state.acceptEvent);
   const rejectEvent = useReviewStore((state) => state.rejectEvent);
   const editEvent = useReviewStore((state) => state.editEvent);
 
-  const reviewResult = useMemo(() => {
-    return reviewResults.find((item) => item.eventId === selectedEvent?.id);
-  }, [reviewResults, selectedEvent?.id]);
+  const reviewResultByEventId = useMemo(() => {
+    return reviewResults.reduce<Record<number, (typeof reviewResults)[number]>>((acc, result) => {
+      acc[result.eventId] = result;
+      return acc;
+    }, {});
+  }, [reviewResults]);
 
-  const openEdit = () => {
+  useEffect(() => {
     if (!selectedEvent) return;
+    setExpandedEventIds((current) => new Set(current).add(selectedEvent.id));
+  }, [selectedEvent?.id]);
+
+  const toggleEvent = (event: VideoEvent) => {
+    selectEvent(event.id);
+    setExpandedEventIds((current) => {
+      const next = new Set(current);
+      if (next.has(event.id)) {
+        next.delete(event.id);
+      } else {
+        next.add(event.id);
+      }
+      return next;
+    });
+  };
+
+  const openEdit = (event: VideoEvent) => {
+    setActiveEvent(event);
     form.setFieldsValue({
-      start_time_ms: selectedEvent.start_time_ms,
-      end_time_ms: selectedEvent.end_time_ms,
-      title: selectedEvent.title,
-      description: selectedEvent.description,
-      reasoning_description: selectedEvent.reasoning_description,
+      start_time_ms: event.start_time_ms,
+      end_time_ms: event.end_time_ms,
+      title: event.title,
+      description: event.description,
+      reasoning_description: event.reasoning_description,
     });
     setEditOpen(true);
   };
 
-  const handleAccept = async () => {
-    if (!selectedEvent) return;
+  const handleAccept = async (event: VideoEvent) => {
+    setActiveEvent(event);
     setSubmitting(true);
-    await acceptEvent(selectedEvent.id);
+    await acceptEvent(event.id);
     setSubmitting(false);
-    void message.success(`已通过 ${selectedEvent.id}`);
+    setActiveEvent(undefined);
+    void message.success(`已批准 ${event.id}`);
   };
 
   const handleReject = async () => {
-    if (!selectedEvent) return;
+    if (!activeEvent) return;
     const values = await rejectForm.validateFields();
     setSubmitting(true);
-    await rejectEvent(selectedEvent.id, values.reason);
+    await rejectEvent(activeEvent.id, values.reason);
     setSubmitting(false);
     setRejectOpen(false);
+    setActiveEvent(undefined);
     rejectForm.resetFields();
-    void message.warning(`已驳回 ${selectedEvent.id}`);
+    void message.warning(`已拒绝 ${activeEvent.id}`);
   };
 
   const handleEdit = async () => {
-    if (!selectedEvent) return;
+    if (!activeEvent) return;
     const values = await form.validateFields();
     setSubmitting(true);
-    await editEvent(selectedEvent.id, values);
+    await editEvent(activeEvent.id, values);
     setSubmitting(false);
     setEditOpen(false);
-    void message.success(`已修改 ${selectedEvent.id}`);
+    setActiveEvent(undefined);
+    void message.success(`已修改 ${activeEvent.id}`);
   };
 
-  if (!currentTask || !selectedEvent) {
+  const openReject = (event: VideoEvent) => {
+    setActiveEvent(event);
+    setRejectOpen(true);
+  };
+
+  const closeEdit = () => {
+    setEditOpen(false);
+    setActiveEvent(undefined);
+  };
+
+  const closeReject = () => {
+    setRejectOpen(false);
+    setActiveEvent(undefined);
+    rejectForm.resetFields();
+  };
+
+  if (!currentTask) {
     return (
       <aside className="flex h-full items-center justify-center">
-        <Empty description="请选择事件" />
+        <Empty description="请选择任务" />
       </aside>
     );
   }
@@ -80,83 +125,103 @@ export function ReviewPanel() {
       <div className="border-b border-slate-200 p-4">
         <div className="flex items-start justify-between gap-3">
           <div>
-            <div className="text-sm font-semibold text-slate-950">事件面板</div>
-            <div className="mt-1 font-mono text-xs text-slate-500">#{selectedEvent.id}</div>
+            <div className="text-sm font-semibold text-slate-950">活动</div>
+            <div className="mt-1 text-xs text-slate-500">全部事件已加载，可展开查看详情</div>
           </div>
-          {reviewResult ? (
-            <Tag color={reviewResult.status === 'rejected' ? 'red' : reviewResult.status === 'accepted' ? 'green' : 'blue'} className="m-0">
-              {reviewStatusLabel[reviewResult.status]}
-            </Tag>
-          ) : (
-            <Tag className="m-0">未审核</Tag>
-          )}
+          <Tag color="blue" className="m-0">
+            {events.length} 事件
+          </Tag>
         </div>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto p-4">
-        <div className="rounded-md border border-slate-200 bg-slate-50 p-4">
-          <div className="mb-3 flex items-center justify-between gap-3">
-            <div className="min-w-0 text-lg font-semibold text-slate-950">
-              <span className="block truncate">{selectedEvent.title}</span>
-            </div>
-            <div className="font-mono text-xs text-slate-500">{formatRange(selectedEvent.start_time_ms / 1000, selectedEvent.end_time_ms / 1000)}</div>
+      <div className="min-h-0 flex-1 space-y-3 overflow-y-auto bg-slate-50 p-3">
+        {events.length ? (
+          events.map((event, index) => {
+            const expanded = expandedEventIds.has(event.id);
+            const reviewResult = reviewResultByEventId[event.id];
+            const selected = selectedEvent?.id === event.id;
+
+            return (
+              <section
+                key={event.id}
+                className={clsx(
+                  'overflow-hidden rounded-md border bg-white shadow-sm transition',
+                  selected ? 'border-blue-300 ring-1 ring-blue-100' : 'border-slate-200',
+                )}
+              >
+                <button
+                  type="button"
+                  onClick={() => toggleEvent(event)}
+                  className="flex w-full items-center gap-3 px-3 py-3 text-left hover:bg-slate-50"
+                >
+                  <span className="flex h-5 w-5 shrink-0 items-center justify-center text-xs text-slate-400">
+                    {expanded ? <DownOutlined /> : <RightOutlined />}
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-sm font-semibold text-slate-950">{event.title}</span>
+                    <span className="mt-1 block font-mono text-xs text-slate-500">
+                      事件 {index + 1}/{events.length} · {formatRange(event.start_time_ms / 1000, event.end_time_ms / 1000)}
+                    </span>
+                  </span>
+                  {reviewResult ? (
+                    <Tag color={reviewResult.status === 'rejected' ? 'red' : reviewResult.status === 'accepted' ? 'green' : 'blue'} className="m-0 shrink-0">
+                      {reviewStatusLabel[reviewResult.status]}
+                    </Tag>
+                  ) : (
+                    <Tag className="m-0 shrink-0">未审核</Tag>
+                  )}
+                </button>
+
+                {expanded ? (
+                  <div className="border-t border-slate-200 bg-white p-3">
+                    <div className="rounded-md border border-slate-200 bg-slate-50 p-3">
+                      
+                      <div className="space-y-3">
+                        <div>
+                          <div className="mb-1 text-xs font-semibold text-slate-500">事件描述</div>
+                          <p className="m-0 whitespace-pre-wrap text-sm leading-6 text-slate-700">{event.description}</p>
+                        </div>
+                        {/* <div className="flex flex-wrap gap-x-4 gap-y-1 font-mono text-xs text-slate-500">
+                          <span>{formatRange(event.start_time_ms / 1000, event.end_time_ms / 1000)}</span>
+                          <span>置信度 {Math.round(event.confidence * 100)}%</span>
+                        </div> */}
+                      </div>
+                      <div className="mb-3 flex justify-end mt-6">
+                        <Space size={8}>
+                          <Button size="small" type="primary" loading={submitting && activeEvent?.id === event.id} icon={<CheckCircleOutlined />} onClick={() => void handleAccept(event)}>
+                            批准
+                          </Button>
+                          <Button size="small" danger icon={<CloseCircleOutlined />} onClick={() => openReject(event)}>
+                            拒绝
+                          </Button>
+                          <Button size="small" icon={<EditOutlined />} onClick={() => openEdit(event)}>
+                            编辑
+                          </Button>
+                        </Space>
+                      </div>
+                    </div>
+
+                    <div className="mt-3 rounded-md border border-slate-200 bg-white p-3">
+                      <div className="mb-2 text-xs font-semibold text-slate-500">推理描述</div>
+                      <p className="m-0 whitespace-pre-wrap text-sm leading-6 text-slate-700">{event.reasoning_description}</p>
+                    </div>
+
+                    {reviewResult?.comment && reviewResult.comment !== 'manual_edit' ? (
+                      <div className="mt-3 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">{reviewResult.comment}</div>
+                    ) : null}
+                  </div>
+                ) : null}
+              </section>
+            );
+          })
+        ) : (
+          <div className="flex h-full items-center justify-center">
+            <Empty description="暂无事件" />
           </div>
-          <Progress
-            percent={Math.round(selectedEvent.confidence * 100)}
-            size="small"
-            strokeColor={selectedEvent.confidence > 0.82 ? '#16a34a' : '#0891b2'}
-          />
-        </div>
-
-        <Divider className="my-4" />
-
-        <Descriptions column={1} size="small" bordered>
-          <Descriptions.Item label="来源">{selectedEvent.source}</Descriptions.Item>
-          <Descriptions.Item label="状态">{selectedEvent.status}</Descriptions.Item>
-          <Descriptions.Item label="开始时间">{selectedEvent.start_time_ms} ms</Descriptions.Item>
-          <Descriptions.Item label="结束时间">{selectedEvent.end_time_ms} ms</Descriptions.Item>
-        </Descriptions>
-
-
-        <div className="mt-4">
-          <div className="mb-2 text-xs font-semibold tracking-wide text-slate-500">事件描述</div>
-          <p className="rounded-md border border-slate-200 bg-white p-3 text-sm leading-6 text-slate-700">{selectedEvent.description}</p>
-        </div>
-
-        <div className="mt-4">
-          <div className="mb-2 text-xs font-semibold tracking-wide text-slate-500">推理描述</div>
-          <p className="rounded-md border border-slate-200 bg-white p-3 text-sm leading-6 text-slate-700">{selectedEvent.reasoning_description}</p>
-        </div>
-
-        {/* {selectedEvent.raw_payload ? (
-          <div className="mt-4">
-            <div className="mb-2 text-xs font-semibold tracking-wide text-slate-500">Raw Payload</div>
-            <pre className="max-h-[220px] overflow-auto rounded-md border border-slate-200 bg-slate-950 p-3 text-xs leading-5 text-slate-100">
-              {JSON.stringify(selectedEvent.raw_payload, null, 2)}
-            </pre>
-          </div>
-        ) : null} */}
-
-        {reviewResult?.comment && reviewResult.comment !== 'manual_edit' ? (
-          <div className="mt-4 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">{reviewResult.comment}</div>
-        ) : null}
+        )}
       </div>
 
-      <div className="border-t border-slate-200 bg-white p-4">
-        <Space.Compact block>
-          <Button loading={submitting} type="primary" icon={<CheckCircleOutlined />} onClick={handleAccept}>
-            通过
-          </Button>
-          <Button icon={<EditOutlined />} onClick={openEdit}>
-            编辑
-          </Button>
-          <Button danger icon={<CloseCircleOutlined />} onClick={() => setRejectOpen(true)}>
-            驳回
-          </Button>
-        </Space.Compact>
-      </div>
-
-      <Modal title="编辑事件" open={editOpen} onCancel={() => setEditOpen(false)} onOk={handleEdit} confirmLoading={submitting}>
+      <Modal title="编辑事件" open={editOpen} onCancel={closeEdit} onOk={handleEdit} confirmLoading={submitting}>
         <Form form={form} layout="vertical">
           <div className="grid grid-cols-2 gap-3">
             <Form.Item name="start_time_ms" label="开始时间" rules={[{ required: true }]}>
@@ -178,7 +243,7 @@ export function ReviewPanel() {
         </Form>
       </Modal>
 
-      <Modal title="驳回事件" open={rejectOpen} onCancel={() => setRejectOpen(false)} onOk={handleReject} confirmLoading={submitting} okButtonProps={{ danger: true }}>
+      <Modal title="驳回事件" open={rejectOpen} onCancel={closeReject} onOk={handleReject} confirmLoading={submitting} okButtonProps={{ danger: true }}>
         <Form form={rejectForm} layout="vertical">
           <Form.Item name="reason" label="驳回原因" rules={[{ required: true, message: '请输入驳回原因' }]}> 
             <TextArea rows={4} placeholder="说明驳回原因，例如时间区间错误、事件描述不匹配或置信度不足。" />
@@ -188,5 +253,3 @@ export function ReviewPanel() {
     </aside>
   );
 }
-
-
