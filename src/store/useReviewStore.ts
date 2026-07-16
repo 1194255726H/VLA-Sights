@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { api } from '../api/mockApi';
-import type { AnalysisJob, AnalysisQuery, EventEditPayload, Project, ReviewResult, Task, User, VideoEvent } from '../types/domain';
+import type { AnalysisJob, AnalysisQuery, EventEditPayload, Project, ProjectPage, ReviewResult, Task, User, VideoEvent } from '../types/domain';
 
 interface ReviewState {
   user?: User;
@@ -9,6 +9,7 @@ interface ReviewState {
   authLoading: boolean;
   authError?: string;
   projects: Project[];
+  projectPagination: ProjectPage['pagination'];
   currentProject?: Project;
   tasks: Task[];
   currentTask?: Task;
@@ -27,7 +28,7 @@ interface ReviewState {
   restoreSession: () => Promise<void>;
   logout: () => void;
   backToProjects: () => void;
-  loadProjects: () => Promise<void>;
+  loadProjects: (page?: number) => Promise<void>;
   selectProject: (projectId: number) => Promise<void>;
   openProject: (projectId: number) => Promise<void>;
   loadTasks: (projectId?: number) => Promise<void>;
@@ -56,6 +57,7 @@ export const useReviewStore = create<ReviewState>((set, get) => ({
   authChecked: false,
   authLoading: false,
   projects: [],
+  projectPagination: { page: 1, page_size: 20, total: 0, total_pages: 0 },
   tasks: [],
   events: [],
   analysisQueries: [],
@@ -102,6 +104,7 @@ export const useReviewStore = create<ReviewState>((set, get) => ({
       user: undefined,
       token: undefined,
       projects: [],
+      projectPagination: { page: 1, page_size: 20, total: 0, total_pages: 0 },
       currentProject: undefined,
       tasks: [],
       currentTask: undefined,
@@ -128,10 +131,15 @@ export const useReviewStore = create<ReviewState>((set, get) => ({
     });
   },
 
-  loadProjects: async () => {
+  loadProjects: async (page = 1) => {
     set({ projectLoading: true, isLoading: true });
-    const projects = await api.getProjects();
-    set({ projects, projectLoading: false, isLoading: false });
+    try {
+      const response = await api.getProjects(page, 20);
+      set({ projects: response.items, projectPagination: response.pagination, projectLoading: false, isLoading: false });
+    } catch (error) {
+      set({ projectLoading: false, isLoading: false });
+      throw error;
+    }
   },
 
   selectProject: async (projectId: number) => {
@@ -144,7 +152,7 @@ export const useReviewStore = create<ReviewState>((set, get) => ({
       await get().loadProjects();
       project = get().projects.find((item) => item.id === projectId);
     }
-    if (!project) return;
+    if (!project) throw new Error('项目不存在或当前账号无权访问');
 
     set({
       currentProject: project,

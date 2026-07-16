@@ -22,7 +22,7 @@ export function LoginPage() {
 
   const handleSubmit = async (values: LoginFormValues) => {
     await login(values.username, values.password);
-    navigateTo('/projects', true);
+    navigateTo('/project', true);
   };
 
   const fillAccount = (username: string, password: string) => {
@@ -58,4 +58,3 @@ export function LoginPage() {
     </main>
   );
 }
-

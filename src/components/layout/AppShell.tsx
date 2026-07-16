@@ -11,7 +11,7 @@ import { navigateTo } from '../../utils/router';
 const { Header, Sider, Content } = Layout;
 
 interface AppShellProps {
-  route: 'projects' | 'annotation';
+  route: 'project' | 'projects';
 }
 
 export function AppShell({ route }: AppShellProps) {
@@ -22,7 +22,7 @@ export function AppShell({ route }: AppShellProps) {
 
   const handleBackToProjects = () => {
     backToProjects();
-    navigateTo('/projects');
+    navigateTo('/project');
   };
 
   const handleLogout = () => {
@@ -39,11 +39,11 @@ export function AppShell({ route }: AppShellProps) {
           </div>
           <div>
             {/* <div className="text-sm font-semibold tracking-wide">VLA 数据审核平台</div> */}
-            <div className="text-[11px] text-slate-400">{route === 'annotation' && currentProject ? currentProject.name : '项目工作台'}</div>
+            <div className="text-[11px] text-slate-400">{route === 'projects' && currentProject ? currentProject.name : '项目管理'}</div>
           </div>
         </div>
         <div className="flex items-center gap-3 text-xs text-slate-300">
-          {route === 'annotation' ? (
+          {route === 'projects' ? (
             <Button size="small" icon={<ProjectOutlined />} onClick={handleBackToProjects}>
               项目
             </Button>
@@ -62,7 +62,7 @@ export function AppShell({ route }: AppShellProps) {
         </div>
       </Header>
 
-      {route === 'annotation' ? (
+      {route === 'projects' ? (
         <Layout className="min-h-0 flex-1 overflow-hidden">
           <Sider width={300} theme="light" className="border-r border-slate-200 bg-white">
             <TaskList />

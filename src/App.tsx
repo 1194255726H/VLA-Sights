@@ -33,21 +33,21 @@ export default function App() {
     }
 
     if (user && route === 'login') {
-      navigateTo('/projects', true);
+      navigateTo('/project', true);
     }
   }, [authChecked, route, user]);
 
   useEffect(() => {
-    if (!authChecked || !user || route !== 'annotation') return;
+    if (!authChecked || !user || route !== 'projects') return;
 
     const projectId = getProjectIdFromUrl();
     if (!projectId) {
-      navigateTo('/projects', true);
+      navigateTo('/project', true);
       return;
     }
 
     if (currentProject?.id !== projectId) {
-      void openProject(projectId);
+      void openProject(projectId).catch(() => navigateTo('/project', true));
     }
   }, [authChecked, currentProject?.id, openProject, route, user]);
 
@@ -69,7 +69,7 @@ export default function App() {
       ) : route === 'login' || !user ? (
         <LoginPage />
       ) : (
-        <AppShell route={route === 'annotation' ? 'annotation' : 'projects'} />
+        <AppShell route={route} />
       )}
     </ConfigProvider>
   );

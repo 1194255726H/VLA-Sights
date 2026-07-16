@@ -1,8 +1,8 @@
-﻿export type AppRoute = 'login' | 'projects' | 'annotation';
+export type AppRoute = 'login' | 'project' | 'projects';
 
 export const getRouteFromPath = (pathname = window.location.pathname): AppRoute => {
-  if (pathname.startsWith('/annotation')) return 'annotation';
-  if (pathname.startsWith('/projects')) return 'projects';
+  if (pathname === '/project' || pathname === '/project/' || pathname === '/项目' || pathname === '/项目/') return 'project';
+  if (pathname.startsWith('/projects') || pathname.startsWith('/annotation')) return 'projects';
   return 'login';
 };
 

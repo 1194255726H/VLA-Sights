@@ -15,7 +15,7 @@ export interface AuthSession {
   user: User;
 }
 
-export type ProjectAssignmentMode = 'preemptive' | 'manual';
+export type ProjectAssignmentMode = 'preemptive' | 'assigned';
 
 export interface Project {
   id: number;
@@ -23,11 +23,40 @@ export interface Project {
   company_name: string;
   name: string;
   description: string;
-  oss_prefix: string;
+  bucket_name: string;
+  bucket_prefix: string;
+  file_filter_regex: string;
+  endpoint: string;
+  access_key_id: string;
+  secret_access_key_set: boolean;
+  recursive_scan: boolean;
   assignment_mode: ProjectAssignmentMode;
   task_count: number;
   created_at: string;
   updated_at: string;
+}
+
+export interface ProjectInput {
+  name: string;
+  description?: string;
+  bucket_name: string;
+  bucket_prefix: string;
+  file_filter_regex: string;
+  endpoint: string;
+  access_key_id: string;
+  secret_access_key?: string;
+  recursive_scan: boolean;
+  assignment_mode?: ProjectAssignmentMode;
+}
+
+export interface ProjectPage {
+  items: Project[];
+  pagination: {
+    page: number;
+    page_size: number;
+    total: number;
+    total_pages: number;
+  };
 }
 
 export type TaskStatus = 'pending' | 'labeling' | 'analyzing' | 'completed' | 'failed';

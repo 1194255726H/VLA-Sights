@@ -1,4 +1,4 @@
-import type { AnalysisJob, AnalysisQuery, AuthSession, Project, ReviewResult, Task, User, VideoEvent } from '../types/domain';
+import type { AnalysisJob, AnalysisQuery, AuthSession, Project, ProjectInput, ProjectPage, ReviewResult, Task, User, VideoEvent } from '../types/domain';
 
 const API_BASE_URL = import.meta.env.VITE_VLA_API_BASE_URL ?? '';
 const USE_MOCK = import.meta.env.VITE_USE_MOCK_API === 'true';
@@ -67,7 +67,13 @@ const projects: Project[] = [
     company_name: '默认 VLA 标注公司',
     name: '默认 VLA 视频标注项目',
     description: '默认初始化项目，对应 OSS vla/ 目录。',
-    oss_prefix: 'vla/',
+    bucket_name: 'video-bucket',
+    bucket_prefix: 'vla/',
+    file_filter_regex: '.*\\.mp4$',
+    endpoint: 'http://127.0.0.1:9000',
+    access_key_id: 'minio',
+    secret_access_key_set: true,
+    recursive_scan: true,
     assignment_mode: 'preemptive',
     task_count: 10,
     created_at: '2026-06-23T15:00:00+08:00',
@@ -156,6 +162,7 @@ const analysisQueriesByTaskId = tasks.reduce<Record<number, AnalysisQuery[]>>((a
 }, {});
 
 const mockJobTaskIds: Record<number, number> = {};
+const mockSyncJobs: Record<number, AnalysisJob> = {};
 
 const mockBackend = {
   async login(username: string, password: string): Promise<AuthSession> {
@@ -185,9 +192,100 @@ const mockBackend = {
     return { user: { ...defaultUser, username, role } };
   },
 
-  async getProjects(): Promise<Project[]> {
+  async getProjects(): Promise<ProjectPage> {
     await delay();
-    return projects;
+    return {
+      items: [...projects],
+      pagination: { page: 1, page_size: 20, total: projects.length, total_pages: projects.length ? 1 : 0 },
+    };
+  },
+
+  async createProject(input: ProjectInput): Promise<Project> {
+    await delay();
+    const now = new Date().toISOString();
+    const project: Project = {
+      id: Math.max(0, ...projects.map((item) => item.id)) + 1,
+      company_id: defaultUser.company_id,
+      company_name: defaultUser.company_name,
+      name: input.name,
+      description: input.description ?? '',
+      bucket_name: input.bucket_name,
+      bucket_prefix: input.bucket_prefix,
+      file_filter_regex: input.file_filter_regex,
+      endpoint: input.endpoint,
+      access_key_id: input.access_key_id,
+      secret_access_key_set: Boolean(input.secret_access_key),
+      recursive_scan: input.recursive_scan,
+      assignment_mode: input.assignment_mode ?? 'preemptive',
+      task_count: 0,
+      created_at: now,
+      updated_at: now,
+    };
+    projects.unshift(project);
+    return project;
+  },
+
+  async updateProject(projectId: number, input: Partial<ProjectInput>): Promise<Project> {
+    await delay();
+    const project = projects.find((item) => item.id === projectId);
+    if (!project) throw new Error('项目不存在');
+    const { secret_access_key, ...changes } = input;
+    Object.assign(project, changes, {
+      secret_access_key_set: project.secret_access_key_set || Boolean(secret_access_key),
+      updated_at: new Date().toISOString(),
+    });
+    return { ...project };
+  },
+
+  async deleteProject(projectId: number): Promise<{ deleted: boolean; deleted_count: number }> {
+    await delay();
+    const index = projects.findIndex((item) => item.id === projectId);
+    if (index < 0) throw new Error('项目不存在');
+    const [project] = projects.splice(index, 1);
+    return { deleted: true, deleted_count: project.task_count + 1 };
+  },
+
+  async testProjectStorage(): Promise<{ ok: boolean; message: string }> {
+    await delay(420);
+    return { ok: true, message: 'MinIO 连接测试通过。' };
+  },
+
+  async syncProject(projectId: number): Promise<AnalysisJob> {
+    await delay();
+    const project = projects.find((item) => item.id === projectId);
+    if (!project) throw new Error('项目不存在');
+    const jobId = Date.now();
+    const job: AnalysisJob = {
+      id: jobId,
+      job_type: 'sync_oss',
+      status: 'pending',
+      payload: { project_id: projectId },
+      attempts: 0,
+      max_attempts: 3,
+      last_error: '',
+      created_at: new Date().toISOString(),
+    };
+    mockSyncJobs[jobId] = job;
+    return job;
+  },
+
+  async getProjectJob(jobId: number): Promise<AnalysisJob> {
+    await delay(650);
+    const job = mockSyncJobs[jobId];
+    if (!job) throw new Error('同步任务不存在');
+    const projectId = Number(job.payload.project_id);
+    const project = projects.find((item) => item.id === projectId);
+    if (project) project.updated_at = new Date().toISOString();
+    const finished = {
+      ...job,
+      status: 'succeeded' as const,
+      attempts: 1,
+      updated_at: new Date().toISOString(),
+      finished_at: new Date().toISOString(),
+      payload: { ...job.payload, result: { created_tasks: 0, updated_tasks: 0, total_tasks: project?.task_count ?? 0 } },
+    };
+    mockSyncJobs[jobId] = finished;
+    return finished;
   },
 
   async getTasks(projectId: number): Promise<Task[]> {
@@ -318,9 +416,48 @@ export const api = {
     return request<{ user: User }>('/api/vla/auth/me/');
   },
 
-  async getProjects(): Promise<Project[]> {
+  async getProjects(page = 1, pageSize = 20): Promise<ProjectPage> {
     if (USE_MOCK) return mockBackend.getProjects();
-    return request<Project[]>('/api/vla/projects/');
+    const response = await request<ProjectPage | Project[]>(`/api/vla/projects/?page=${page}&page_size=${pageSize}`);
+    if (Array.isArray(response)) {
+      return {
+        items: response,
+        pagination: { page, page_size: pageSize, total: response.length, total_pages: response.length ? 1 : 0 },
+      };
+    }
+    return response;
+  },
+
+  async createProject(input: ProjectInput): Promise<Project> {
+    if (USE_MOCK) return mockBackend.createProject(input);
+    return request<Project>('/api/vla/projects/', { method: 'POST', body: JSON.stringify(input) });
+  },
+
+  async updateProject(projectId: number, input: Partial<ProjectInput>): Promise<Project> {
+    if (USE_MOCK) return mockBackend.updateProject(projectId, input);
+    return request<Project>(`/api/vla/projects/${projectId}/`, { method: 'PATCH', body: JSON.stringify(input) });
+  },
+
+  async deleteProject(projectId: number): Promise<{ deleted: boolean; deleted_count: number }> {
+    if (USE_MOCK) return mockBackend.deleteProject(projectId);
+    return request<{ deleted: boolean; deleted_count: number }>(`/api/vla/projects/${projectId}/`, { method: 'DELETE' });
+  },
+
+  async testProjectStorage(input: Partial<ProjectInput>, projectId?: number): Promise<{ ok: boolean; message: string }> {
+    if (USE_MOCK) return mockBackend.testProjectStorage();
+    const path = projectId ? `/api/vla/projects/${projectId}/storage/test/` : '/api/vla/projects/storage/test/';
+    return request<{ ok: boolean; message: string }>(path, { method: 'POST', body: JSON.stringify(input) });
+  },
+
+  async syncProject(projectId: number): Promise<AnalysisJob> {
+    if (USE_MOCK) return mockBackend.syncProject(projectId);
+    return request<AnalysisJob>(`/api/vla/projects/${projectId}/sync/`, { method: 'POST', body: JSON.stringify({}) });
+  },
+
+  async getProjectJob(jobId: number): Promise<AnalysisJob> {
+    if (USE_MOCK) return mockBackend.getProjectJob(jobId);
+    const response = await request<AnalysisJob | { job: AnalysisJob }>(`/api/vla/jobs/${jobId}/`);
+    return 'job' in response ? response.job : response;
   },
 
   async getTasks(projectId: number): Promise<Task[]> {
