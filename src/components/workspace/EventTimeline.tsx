@@ -9,11 +9,10 @@ import { formatRange } from '../../utils/time';
 interface EventTimelineProps {
   events: VideoEvent[];
   selectedEvent?: VideoEvent;
-  reviewStatusByEventId: Record<number, string>;
   onSelect: (event: VideoEvent) => void;
 }
 
-export function EventTimeline({ events, selectedEvent, reviewStatusByEventId, onSelect }: EventTimelineProps) {
+export function EventTimeline({ events, selectedEvent, onSelect }: EventTimelineProps) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
 
   const handleWheel = (event: WheelEvent<HTMLDivElement>) => {
@@ -58,9 +57,7 @@ export function EventTimeline({ events, selectedEvent, reviewStatusByEventId, on
             >
               <div className="mb-2 flex items-center justify-between gap-2">
                 <span className="min-w-0 truncate text-sm font-semibold text-slate-900">{event.title}</span>
-                {reviewStatusByEventId[event.id] ? (
-                  <span className="shrink-0 text-[11px] text-blue-600">{reviewStatusLabel[reviewStatusByEventId[event.id] as keyof typeof reviewStatusLabel]}</span>
-                ) : null}
+                <span className="shrink-0 text-[11px] text-blue-600">{reviewStatusLabel[event.review_status ?? 'pending']}</span>
               </div>
               <div className="font-mono text-xs text-slate-600">{formatRange(event.start_time_ms / 1000, event.end_time_ms / 1000)}</div>
               {/* <div className="mt-2 h-1.5 rounded-full bg-slate-200">

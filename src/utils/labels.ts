@@ -1,4 +1,4 @@
-﻿import type { ReviewResult, TaskStatus, UserRole } from '../types/domain';
+import type { EventReviewStatus, TaskStatus, UserRole } from '../types/domain';
 
 export const roleLabel: Record<UserRole, string> = {
   admin: '公司管理员',
@@ -14,8 +14,8 @@ export const taskStatusLabel: Record<TaskStatus, string> = {
   failed: '失败',
 };
 
-export const reviewStatusLabel: Record<ReviewResult['status'], string> = {
-  accepted: '已通过',
+export const reviewStatusLabel: Record<EventReviewStatus, string> = {
+  pending: '未审核',
+  approved: '已通过',
   rejected: '已驳回',
-  edited: '已修改',
 };

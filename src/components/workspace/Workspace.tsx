@@ -1,6 +1,6 @@
 ﻿import { Alert, Button, Empty, Input, Space, Spin, Tag, message } from 'antd';
 import { ThunderboltOutlined, SearchOutlined } from '@ant-design/icons';
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { useReviewStore } from '../../store/useReviewStore';
 import type { VideoEvent } from '../../types/domain';
 import { taskStatusLabel } from '../../utils/labels';
@@ -15,7 +15,6 @@ export function Workspace() {
   const analysisQueries = useReviewStore((state) => state.analysisQueries);
   const selectedEvent = useReviewStore((state) => state.selectedEvent);
   const seekRequestId = useReviewStore((state) => state.seekRequestId);
-  const reviewResults = useReviewStore((state) => state.reviewResults);
   const isLoading = useReviewStore((state) => state.isLoading);
   const analysisLoading = useReviewStore((state) => state.analysisLoading);
   const analysisJob = useReviewStore((state) => state.analysisJob);
@@ -26,13 +25,6 @@ export function Workspace() {
   const analyzeCurrentTask = useReviewStore((state) => state.analyzeCurrentTask);
 
   const canAnalyze = user?.role === 'admin' || user?.role === 'labeler';
-
-  const reviewStatusByEventId = useMemo(() => {
-    return reviewResults.reduce<Record<number, string>>((acc, result) => {
-      acc[result.eventId] = result.status;
-      return acc;
-    }, {});
-  }, [reviewResults]);
 
   const handleSelectEvent = (event: VideoEvent) => {
     selectEvent(event.id);
@@ -131,7 +123,6 @@ export function Workspace() {
             <EventTimeline
               events={events}
               selectedEvent={selectedEvent}
-              reviewStatusByEventId={reviewStatusByEventId}
               onSelect={handleSelectEvent}
             />
           </div>

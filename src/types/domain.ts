@@ -80,8 +80,9 @@ export interface Task {
   events?: VideoEvent[];
 }
 
-export type EventSource = 'model' | 'manual';
+export type EventSource = 'model' | 'human';
 export type EventStatus = 'active' | 'deleted';
+export type EventReviewStatus = 'pending' | 'approved' | 'rejected';
 
 export interface VideoEvent {
   id: number;
@@ -91,10 +92,13 @@ export interface VideoEvent {
   title: string;
   description: string;
   reasoning_description: string;
-  confidence: number;
+  confidence: number | null;
   source: EventSource;
   status: EventStatus;
-  raw_payload?: Record<string, unknown>;
+  review_status: EventReviewStatus;
+  raw_payload: Record<string, unknown> | null;
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface AnalysisQuery {
@@ -109,21 +113,29 @@ export interface AnalysisQuery {
   updated_at: string;
 }
 
-export type ReviewStatus = 'accepted' | 'rejected' | 'edited';
-
-export interface ReviewResult {
-  eventId: number;
-  status: ReviewStatus;
-  comment?: string;
-}
-
 export interface EventEditPayload {
   title: string;
   description: string;
   reasoning_description: string;
   start_time_ms: number;
   end_time_ms: number;
+  confidence: number | null;
 }
+
+export type EventUpdatePayload = Partial<
+  Pick<
+    VideoEvent,
+    | 'start_time_ms'
+    | 'end_time_ms'
+    | 'title'
+    | 'description'
+    | 'reasoning_description'
+    | 'confidence'
+    | 'status'
+    | 'review_status'
+    | 'raw_payload'
+  >
+>;
 
 export type JobStatus = 'pending' | 'running' | 'succeeded' | 'failed';
 

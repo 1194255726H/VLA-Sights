@@ -1,38 +1,40 @@
-﻿import { Button, Empty, Form, Input, InputNumber, Modal, Space, Tag, message } from 'antd';
-import { CheckCircleOutlined, CloseCircleOutlined, DownOutlined, EditOutlined, RightOutlined } from '@ant-design/icons';
+import { Button, Empty, Form, Input, InputNumber, Modal, Popconfirm, Space, Tag, message } from 'antd';
+import { CheckCircleOutlined, CloseCircleOutlined, DeleteOutlined, DownOutlined, EditOutlined, RightOutlined } from '@ant-design/icons';
 import clsx from 'clsx';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useReviewStore } from '../../store/useReviewStore';
-import type { EventEditPayload, VideoEvent } from '../../types/domain';
+import type { EventEditPayload, EventReviewStatus, VideoEvent } from '../../types/domain';
 import { reviewStatusLabel } from '../../utils/labels';
 import { formatRange } from '../../utils/time';
 
 const { TextArea } = Input;
 
+const reviewTagColor: Record<EventReviewStatus, string | undefined> = {
+  pending: undefined,
+  approved: 'green',
+  rejected: 'red',
+};
+
+type EventAction = 'approve' | 'reject' | 'edit' | 'delete';
+
 export function ReviewPanel() {
   const [expandedEventIds, setExpandedEventIds] = useState<Set<number>>(new Set());
-  const [activeEvent, setActiveEvent] = useState<VideoEvent | undefined>();
+  const [activeEvent, setActiveEvent] = useState<VideoEvent>();
   const [editOpen, setEditOpen] = useState(false);
-  const [rejectOpen, setRejectOpen] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
+  const [submitting, setSubmitting] = useState<{ eventId: number; action: EventAction }>();
   const [form] = Form.useForm<EventEditPayload>();
-  const [rejectForm] = Form.useForm<{ reason: string }>();
 
+  const user = useReviewStore((state) => state.user);
   const currentTask = useReviewStore((state) => state.currentTask);
   const events = useReviewStore((state) => state.events);
   const selectedEvent = useReviewStore((state) => state.selectedEvent);
-  const reviewResults = useReviewStore((state) => state.reviewResults);
   const selectEvent = useReviewStore((state) => state.selectEvent);
   const acceptEvent = useReviewStore((state) => state.acceptEvent);
   const rejectEvent = useReviewStore((state) => state.rejectEvent);
   const editEvent = useReviewStore((state) => state.editEvent);
+  const deleteEvent = useReviewStore((state) => state.deleteEvent);
 
-  const reviewResultByEventId = useMemo(() => {
-    return reviewResults.reduce<Record<number, (typeof reviewResults)[number]>>((acc, result) => {
-      acc[result.eventId] = result;
-      return acc;
-    }, {});
-  }, [reviewResults]);
+  const canManageEvents = user?.role === 'admin' || user?.role === 'labeler';
 
   useEffect(() => {
     if (!selectedEvent) return;
@@ -60,56 +62,74 @@ export function ReviewPanel() {
       title: event.title,
       description: event.description,
       reasoning_description: event.reasoning_description,
+      confidence: event.confidence,
     });
     setEditOpen(true);
   };
 
   const handleAccept = async (event: VideoEvent) => {
-    setActiveEvent(event);
-    setSubmitting(true);
-    await acceptEvent(event.id);
-    setSubmitting(false);
-    setActiveEvent(undefined);
-    void message.success(`已批准 ${event.id}`);
+    setSubmitting({ eventId: event.id, action: 'approve' });
+    try {
+      await acceptEvent(event.id);
+      void message.success(`事件 ${event.id} 已通过`);
+    } catch (error) {
+      void message.error(error instanceof Error ? error.message : '批准事件失败');
+    } finally {
+      setSubmitting(undefined);
+    }
   };
 
-  const handleReject = async () => {
-    if (!activeEvent) return;
-    const values = await rejectForm.validateFields();
-    setSubmitting(true);
-    await rejectEvent(activeEvent.id, values.reason);
-    setSubmitting(false);
-    setRejectOpen(false);
-    setActiveEvent(undefined);
-    rejectForm.resetFields();
-    void message.warning(`已拒绝 ${activeEvent.id}`);
+  const handleReject = async (event: VideoEvent) => {
+    setSubmitting({ eventId: event.id, action: 'reject' });
+    try {
+      await rejectEvent(event.id);
+      void message.warning(`事件 ${event.id} 已拒绝`);
+    } catch (error) {
+      void message.error(error instanceof Error ? error.message : '拒绝事件失败');
+    } finally {
+      setSubmitting(undefined);
+    }
   };
 
   const handleEdit = async () => {
     if (!activeEvent) return;
-    const values = await form.validateFields();
-    setSubmitting(true);
-    await editEvent(activeEvent.id, values);
-    setSubmitting(false);
-    setEditOpen(false);
-    setActiveEvent(undefined);
-    void message.success(`已修改 ${activeEvent.id}`);
+
+    let values: EventEditPayload;
+    try {
+      values = await form.validateFields();
+    } catch {
+      return;
+    }
+
+    setSubmitting({ eventId: activeEvent.id, action: 'edit' });
+    try {
+      await editEvent(activeEvent.id, values);
+      void message.success(`事件 ${activeEvent.id} 已修改`);
+      setEditOpen(false);
+      setActiveEvent(undefined);
+    } catch (error) {
+      void message.error(error instanceof Error ? error.message : '编辑事件失败');
+    } finally {
+      setSubmitting(undefined);
+    }
   };
 
-  const openReject = (event: VideoEvent) => {
-    setActiveEvent(event);
-    setRejectOpen(true);
+  const handleDelete = async (event: VideoEvent) => {
+    setSubmitting({ eventId: event.id, action: 'delete' });
+    try {
+      await deleteEvent(event.id);
+      void message.success(`事件 ${event.id} 已删除`);
+    } catch (error) {
+      void message.error(error instanceof Error ? error.message : '删除事件失败');
+    } finally {
+      setSubmitting(undefined);
+    }
   };
 
   const closeEdit = () => {
+    if (submitting?.action === 'edit') return;
     setEditOpen(false);
     setActiveEvent(undefined);
-  };
-
-  const closeReject = () => {
-    setRejectOpen(false);
-    setActiveEvent(undefined);
-    rejectForm.resetFields();
   };
 
   if (!currentTask) {
@@ -138,8 +158,8 @@ export function ReviewPanel() {
         {events.length ? (
           events.map((event, index) => {
             const expanded = expandedEventIds.has(event.id);
-            const reviewResult = reviewResultByEventId[event.id];
             const selected = selectedEvent?.id === event.id;
+            const reviewStatus = event.review_status ?? 'pending';
 
             return (
               <section
@@ -163,40 +183,68 @@ export function ReviewPanel() {
                       事件 {index + 1}/{events.length} · {formatRange(event.start_time_ms / 1000, event.end_time_ms / 1000)}
                     </span>
                   </span>
-                  {reviewResult ? (
-                    <Tag color={reviewResult.status === 'rejected' ? 'red' : reviewResult.status === 'accepted' ? 'green' : 'blue'} className="m-0 shrink-0">
-                      {reviewStatusLabel[reviewResult.status]}
-                    </Tag>
-                  ) : (
-                    <Tag className="m-0 shrink-0">未审核</Tag>
-                  )}
+                  <Tag color={reviewTagColor[reviewStatus]} className="m-0 shrink-0">
+                    {reviewStatusLabel[reviewStatus]}
+                  </Tag>
                 </button>
 
                 {expanded ? (
                   <div className="border-t border-slate-200 bg-white p-3">
                     <div className="rounded-md border border-slate-200 bg-slate-50 p-3">
-                      
-                      <div className="space-y-3">
-                        <div>
-                          <div className="mb-1 text-xs font-semibold text-slate-500">事件描述</div>
-                          <p className="m-0 whitespace-pre-wrap text-sm leading-6 text-slate-700">{event.description}</p>
-                        </div>
-                        {/* <div className="flex flex-wrap gap-x-4 gap-y-1 font-mono text-xs text-slate-500">
-                          <span>{formatRange(event.start_time_ms / 1000, event.end_time_ms / 1000)}</span>
-                          <span>置信度 {Math.round(event.confidence * 100)}%</span>
-                        </div> */}
+                      <div>
+                        <div className="mb-1 text-xs font-semibold text-slate-500">事件描述</div>
+                        <p className="m-0 whitespace-pre-wrap text-sm leading-6 text-slate-700">{event.description}</p>
                       </div>
-                      <div className="mb-3 flex justify-end mt-6">
-                        <Space size={8}>
-                          <Button size="small" type="primary" loading={submitting && activeEvent?.id === event.id} icon={<CheckCircleOutlined />} onClick={() => void handleAccept(event)}>
-                            批准
+                      <div className="mt-6 flex justify-end">
+                        <Space size={8} wrap>
+                          <Button
+                            size="small"
+                            type="primary"
+                            disabled={!canManageEvents || reviewStatus === 'approved'}
+                            loading={submitting?.eventId === event.id && submitting.action === 'approve'}
+                            icon={<CheckCircleOutlined />}
+                            onClick={() => void handleAccept(event)}
+                          >
+                            通过
                           </Button>
-                          <Button size="small" danger icon={<CloseCircleOutlined />} onClick={() => openReject(event)}>
-                            拒绝
-                          </Button>
-                          <Button size="small" icon={<EditOutlined />} onClick={() => openEdit(event)}>
+                          <Popconfirm
+                            title="拒绝这个事件？"
+                            okText="拒绝"
+                            cancelText="取消"
+                            okButtonProps={{ danger: true }}
+                            onConfirm={() => handleReject(event)}
+                          >
+                            <Button
+                              size="small"
+                              danger
+                              disabled={!canManageEvents || reviewStatus === 'rejected'}
+                              loading={submitting?.eventId === event.id && submitting.action === 'reject'}
+                              icon={<CloseCircleOutlined />}
+                            >
+                              拒绝
+                            </Button>
+                          </Popconfirm>
+                          <Button size="small" disabled={!canManageEvents} icon={<EditOutlined />} onClick={() => openEdit(event)}>
                             编辑
                           </Button>
+                          <Popconfirm
+                            title="删除这个事件？"
+                            description="删除后将不再出现在任务事件列表中。"
+                            okText="删除"
+                            cancelText="取消"
+                            okButtonProps={{ danger: true }}
+                            onConfirm={() => handleDelete(event)}
+                          >
+                            <Button
+                              size="small"
+                              danger
+                              disabled={!canManageEvents}
+                              loading={submitting?.eventId === event.id && submitting.action === 'delete'}
+                              icon={<DeleteOutlined />}
+                            >
+                              删除
+                            </Button>
+                          </Popconfirm>
                         </Space>
                       </div>
                     </div>
@@ -205,10 +253,6 @@ export function ReviewPanel() {
                       <div className="mb-2 text-xs font-semibold text-slate-500">推理描述</div>
                       <p className="m-0 whitespace-pre-wrap text-sm leading-6 text-slate-700">{event.reasoning_description}</p>
                     </div>
-
-                    {reviewResult?.comment && reviewResult.comment !== 'manual_edit' ? (
-                      <div className="mt-3 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">{reviewResult.comment}</div>
-                    ) : null}
                   </div>
                 ) : null}
               </section>
@@ -221,32 +265,49 @@ export function ReviewPanel() {
         )}
       </div>
 
-      <Modal title="编辑事件" open={editOpen} onCancel={closeEdit} onOk={handleEdit} confirmLoading={submitting}>
+      <Modal
+        title="编辑事件"
+        open={editOpen}
+        onCancel={closeEdit}
+        onOk={handleEdit}
+        confirmLoading={submitting?.action === 'edit'}
+        maskClosable={!submitting}
+      >
         <Form form={form} layout="vertical">
           <div className="grid grid-cols-2 gap-3">
-            <Form.Item name="start_time_ms" label="开始时间" rules={[{ required: true }]}>
+            <Form.Item name="start_time_ms" label="开始时间" rules={[{ required: true, message: '请输入开始时间' }]}>
               <InputNumber min={0} className="w-full" addonAfter="ms" />
             </Form.Item>
-            <Form.Item name="end_time_ms" label="结束时间" rules={[{ required: true }]}>
+            <Form.Item
+              name="end_time_ms"
+              label="结束时间"
+              dependencies={['start_time_ms']}
+              rules={[
+                { required: true, message: '请输入结束时间' },
+                ({ getFieldValue }) => ({
+                  validator(_, value) {
+                    const startTime = getFieldValue('start_time_ms');
+                    return value !== undefined && startTime !== undefined && value < startTime
+                      ? Promise.reject(new Error('结束时间不能早于开始时间'))
+                      : Promise.resolve();
+                  },
+                }),
+              ]}
+            >
               <InputNumber min={0} className="w-full" addonAfter="ms" />
             </Form.Item>
           </div>
-          <Form.Item name="title" label="事件标题" rules={[{ required: true }]}> 
+          <Form.Item name="title" label="事件标题" rules={[{ required: true, message: '请输入事件标题' }]}>
             <Input />
           </Form.Item>
-          <Form.Item name="description" label="事件描述" rules={[{ required: true }]}> 
+          <Form.Item name="description" label="事件描述" rules={[{ required: true, message: '请输入事件描述' }]}>
             <TextArea rows={4} />
           </Form.Item>
-          <Form.Item name="reasoning_description" label="推理描述" rules={[{ required: true }]}> 
+          <Form.Item name="reasoning_description" label="推理描述" rules={[{ required: true, message: '请输入推理描述' }]}>
             <TextArea rows={4} />
           </Form.Item>
-        </Form>
-      </Modal>
-
-      <Modal title="驳回事件" open={rejectOpen} onCancel={closeReject} onOk={handleReject} confirmLoading={submitting} okButtonProps={{ danger: true }}>
-        <Form form={rejectForm} layout="vertical">
-          <Form.Item name="reason" label="驳回原因" rules={[{ required: true, message: '请输入驳回原因' }]}> 
-            <TextArea rows={4} placeholder="说明驳回原因，例如时间区间错误、事件描述不匹配或置信度不足。" />
+          <Form.Item name="confidence" label="置信度">
+            <InputNumber min={0} max={1} step={0.01} precision={2} className="w-full" />
           </Form.Item>
         </Form>
       </Modal>

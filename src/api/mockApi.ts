@@ -1,4 +1,4 @@
-import type { AnalysisJob, AnalysisQuery, AuthSession, Project, ProjectInput, ProjectPage, ReviewResult, Task, User, VideoEvent } from '../types/domain';
+import type { AnalysisJob, AnalysisQuery, AuthSession, EventUpdatePayload, Project, ProjectInput, ProjectPage, Task, User, VideoEvent } from '../types/domain';
 
 const API_BASE_URL = import.meta.env.VITE_VLA_API_BASE_URL ?? '';
 const USE_MOCK = import.meta.env.VITE_USE_MOCK_API === 'true';
@@ -102,7 +102,10 @@ const makeEvent = (taskId: number, index: number, prompt = '寻找将物品放�
   confidence: [0.91, 0.84, 0.79][index] ?? 0.8,
   source: 'model',
   status: 'active',
+  review_status: 'pending',
   raw_payload: { demo: true, rank: index + 1, prompt },
+  created_at: '2026-06-25T12:00:00+08:00',
+  updated_at: '2026-06-25T12:00:00+08:00',
 });
 
 const tasks: Task[] = Array.from({ length: 10 }, (_, index) => {
@@ -389,9 +392,37 @@ const mockBackend = {
     };
   },
 
-  async submitReview(result: ReviewResult) {
+  async updateEvent(taskId: number, eventId: number, payload: EventUpdatePayload): Promise<VideoEvent> {
     await delay(180);
-    return result;
+    const event = eventsByTaskId[taskId]?.find((item) => item.id === eventId && item.status === 'active');
+    if (!event) throw new Error('事件不存在。');
+
+    const startTime = payload.start_time_ms ?? event.start_time_ms;
+    const endTime = payload.end_time_ms ?? event.end_time_ms;
+    if (endTime < startTime) throw new Error('事件结束时间不能早于开始时间。');
+
+    const contentFields: Array<keyof EventUpdatePayload> = [
+      'start_time_ms',
+      'end_time_ms',
+      'title',
+      'description',
+      'reasoning_description',
+      'confidence',
+      'raw_payload',
+    ];
+    Object.assign(event, payload, {
+      source: contentFields.some((field) => field in payload) ? 'human' : event.source,
+      updated_at: new Date().toISOString(),
+    });
+    return { ...event };
+  },
+
+  async deleteEvent(taskId: number, eventId: number): Promise<VideoEvent> {
+    await delay(180);
+    const event = eventsByTaskId[taskId]?.find((item) => item.id === eventId && item.status === 'active');
+    if (!event) throw new Error('事件不存在。');
+    Object.assign(event, { status: 'deleted', updated_at: new Date().toISOString() });
+    return { ...event };
   },
 };
 
@@ -504,8 +535,17 @@ export const api = {
     return request<{ job: AnalysisJob; task: Pick<Task, 'id' | 'status'> & { events: VideoEvent[] } }>(`/api/vla/jobs/${jobId}/`);
   },
 
-  async submitReview(result: ReviewResult) {
-    return mockBackend.submitReview(result);
+  async updateEvent(taskId: number, eventId: number, payload: EventUpdatePayload): Promise<VideoEvent> {
+    if (USE_MOCK) return mockBackend.updateEvent(taskId, eventId, payload);
+    return request<VideoEvent>(`/api/vla/tasks/${taskId}/events/${eventId}/`, {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    });
+  },
+
+  async deleteEvent(taskId: number, eventId: number): Promise<VideoEvent> {
+    if (USE_MOCK) return mockBackend.deleteEvent(taskId, eventId);
+    return request<VideoEvent>(`/api/vla/tasks/${taskId}/events/${eventId}/`, { method: 'DELETE' });
   },
 };
 

@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { api } from '../api/mockApi';
-import type { AnalysisJob, AnalysisQuery, EventEditPayload, Project, ProjectPage, ReviewResult, Task, User, VideoEvent } from '../types/domain';
+import type { AnalysisJob, AnalysisQuery, EventEditPayload, Project, ProjectPage, Task, User, VideoEvent } from '../types/domain';
 
 interface ReviewState {
   user?: User;
@@ -17,7 +17,6 @@ interface ReviewState {
   analysisQueries: AnalysisQuery[];
   selectedEvent?: VideoEvent;
   seekRequestId: number;
-  reviewResults: ReviewResult[];
   isLoading: boolean;
   projectLoading: boolean;
   taskLoading: boolean;
@@ -38,14 +37,10 @@ interface ReviewState {
   applyAnalysisQuery: (queryId: number) => Promise<void>;
   analyzeCurrentTask: (prompt: string) => Promise<void>;
   acceptEvent: (eventId: number) => Promise<void>;
-  rejectEvent: (eventId: number, reason: string) => Promise<void>;
+  rejectEvent: (eventId: number) => Promise<void>;
   editEvent: (eventId: number, payload: EventEditPayload) => Promise<void>;
+  deleteEvent: (eventId: number) => Promise<void>;
 }
-
-const upsertReviewResult = (results: ReviewResult[], result: ReviewResult) => {
-  const rest = results.filter((item) => item.eventId !== result.eventId);
-  return [...rest, result];
-};
 
 const upsertTask = (tasks: Task[], task: Task | Partial<Task> & Pick<Task, 'id'>) => {
   return tasks.map((item) => (item.id === task.id ? { ...item, ...task } : item));
@@ -62,7 +57,6 @@ export const useReviewStore = create<ReviewState>((set, get) => ({
   events: [],
   analysisQueries: [],
   seekRequestId: 0,
-  reviewResults: [],
   isLoading: false,
   projectLoading: false,
   taskLoading: false,
@@ -111,7 +105,6 @@ export const useReviewStore = create<ReviewState>((set, get) => ({
       events: [],
       analysisQueries: [],
       selectedEvent: undefined,
-      reviewResults: [],
       analysisJob: undefined,
       analysisError: undefined,
     });
@@ -125,7 +118,6 @@ export const useReviewStore = create<ReviewState>((set, get) => ({
       events: [],
       analysisQueries: [],
       selectedEvent: undefined,
-      reviewResults: [],
       analysisJob: undefined,
       analysisError: undefined,
     });
@@ -161,7 +153,6 @@ export const useReviewStore = create<ReviewState>((set, get) => ({
       events: [],
       analysisQueries: [],
       selectedEvent: undefined,
-      reviewResults: [],
       analysisJob: undefined,
       analysisError: undefined,
     });
@@ -192,12 +183,14 @@ export const useReviewStore = create<ReviewState>((set, get) => ({
     }
 
     const [task, analysisQueries] = await Promise.all([api.getTask(taskId), api.getAnalysisQueries(taskId)]);
+    const activeEvents = normalizeActiveEvents(task.events);
     const taskWithoutAppliedEvents = { ...task, events: undefined };
     set({
       currentTask: taskWithoutAppliedEvents,
-      events: [],
+      events: activeEvents,
       analysisQueries,
-      selectedEvent: undefined,
+      selectedEvent: activeEvents[0],
+      seekRequestId: activeEvents[0] ? get().seekRequestId + 1 : get().seekRequestId,
       taskLoading: false,
       isLoading: false,
       tasks: upsertTask(get().tasks, taskWithoutAppliedEvents),
@@ -303,26 +296,49 @@ export const useReviewStore = create<ReviewState>((set, get) => ({
   },
 
   acceptEvent: async (eventId: number) => {
-    const result: ReviewResult = { eventId, status: 'accepted' };
-    await api.submitReview(result);
-    set({ reviewResults: upsertReviewResult(get().reviewResults, result) });
+    const event = get().events.find((item) => item.id === eventId);
+    if (!event) throw new Error('事件不存在');
+    const updatedEvent = await api.updateEvent(event.task_id, eventId, { review_status: 'approved' });
+    const events = get().events.map((item) => (item.id === eventId ? updatedEvent : item));
+    set({ events, selectedEvent: get().selectedEvent?.id === eventId ? updatedEvent : get().selectedEvent });
   },
 
-  rejectEvent: async (eventId: number, reason: string) => {
-    const result: ReviewResult = { eventId, status: 'rejected', comment: reason };
-    await api.submitReview(result);
-    set({ reviewResults: upsertReviewResult(get().reviewResults, result) });
+  rejectEvent: async (eventId: number) => {
+    const event = get().events.find((item) => item.id === eventId);
+    if (!event) throw new Error('事件不存在');
+    const updatedEvent = await api.updateEvent(event.task_id, eventId, { review_status: 'rejected' });
+    const events = get().events.map((item) => (item.id === eventId ? updatedEvent : item));
+    set({ events, selectedEvent: get().selectedEvent?.id === eventId ? updatedEvent : get().selectedEvent });
   },
 
   editEvent: async (eventId: number, payload: EventEditPayload) => {
-    const result: ReviewResult = { eventId, status: 'edited', comment: 'manual_edit' };
-    await api.submitReview(result);
-    const events = get().events.map((event) => (event.id === eventId ? { ...event, ...payload } : event));
+    const event = get().events.find((item) => item.id === eventId);
+    if (!event) throw new Error('事件不存在');
+    const updatedEvent = await api.updateEvent(event.task_id, eventId, payload);
+    const events = get().events.map((item) => (item.id === eventId ? updatedEvent : item));
 
     set({
       events,
-      selectedEvent: events.find((event) => event.id === eventId),
-      reviewResults: upsertReviewResult(get().reviewResults, result),
+      selectedEvent: get().selectedEvent?.id === eventId ? updatedEvent : get().selectedEvent,
+    });
+  },
+
+  deleteEvent: async (eventId: number) => {
+    const currentEvents = get().events;
+    const eventIndex = currentEvents.findIndex((item) => item.id === eventId);
+    const event = currentEvents[eventIndex];
+    if (!event) throw new Error('事件不存在');
+    await api.deleteEvent(event.task_id, eventId);
+
+    const events = currentEvents.filter((item) => item.id !== eventId);
+    const wasSelected = get().selectedEvent?.id === eventId;
+    const selectedEvent = wasSelected
+      ? events[Math.min(eventIndex, events.length - 1)]
+      : get().selectedEvent;
+    set({
+      events,
+      selectedEvent,
+      seekRequestId: wasSelected && selectedEvent ? get().seekRequestId + 1 : get().seekRequestId,
     });
   },
 }));
